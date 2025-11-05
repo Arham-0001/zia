@@ -1,3 +1,4 @@
 API_KEY = "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"
+# API_KEY = "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"
 weather_api="0df53ee30dbad7422d57952a9bcb5261"
 news_api="f3c8b502bbcb4eb2ac45af56bb9ff47f"

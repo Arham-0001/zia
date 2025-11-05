@@ -1,6 +1,7 @@
 import speech_recognition as sr
 from api import API_KEY, weather_api, news_api
 import pyttsx3
+from datetime import datetime
 import webbrowser
 import musiclibrary
 import requests
@@ -73,6 +74,12 @@ def processcmd(command):
         webbrowser.open("https://chat.openai.com")
     elif command.lower() =="open email":
         webbrowser.open("https://mail.google.com")
+    elif "today's date" in command.lower():
+         today = datetime.now()
+         speak(f"today's date is {today.day} {today.strftime('%B')} {today.year}")
+    elif "time" in command.lower(): 
+        now = datetime.now()
+        speak(f"current time is {now.hour} {now.minute}")
     elif command.lower().startswith("play"):
         text =command.lower().split(" ",1)[1]
         song=music[text]
