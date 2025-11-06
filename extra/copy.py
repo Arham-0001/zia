@@ -4,6 +4,7 @@ import pyttsx3
 from datetime import datetime
 import webbrowser
 import musiclibrary
+from time import time
 import webapp
 import requests
 
@@ -176,9 +177,9 @@ def processcmd(command):
 
         weather(city)
 
-    elif "note" in command or "notes" in command or "to do" in command:
-        if "note that" in command or "remember" in command or "add" in command:
-            note_text=command.replace("note that","").replace("remember","").replace("add","").strip()
+    elif "note" in command or "notes" in command or "to do" in command or "remember" in command or "add" in command:
+        if "notes that" in command or "remember" in command or "add" in command:
+            note_text=command.replace("note that","").replace("remember","").replace("add","").replace("note","").strip()
             if note_text:
                 with open("note.txt","a",encoding="utf-8") as f:
                     f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')} - {note_text}\n")
@@ -188,7 +189,7 @@ def processcmd(command):
         
         elif "show" in command or "read" in command or "my notes" in command:
             try:
-                with open("notes.txt", "r", encoding="utf-8") as f:
+                with open("note.txt", "r", encoding="utf-8") as f:
                     notes = f.read().strip()
                     if notes:
                         speak("Here are your notes.")
@@ -200,7 +201,7 @@ def processcmd(command):
                 speak("You don't have any notes yet.")
             
         elif "clear" in command or "delete" in command:
-            open("notes.txt", "w").close()
+            open("note.txt", "w").close()
             speak("All notes have been cleared.")
         else:
             speak("Would you like to add, read, or clear notes?")
@@ -210,35 +211,100 @@ def processcmd(command):
         reply = chatbot_response(command)
 
 
-
 if __name__ == "__main__":
-    speak("initallizing alexaa")
-    r=sr.Recognizer()
+    speak("initializing alexa")
+    r = sr.Recognizer()
+    r.dynamic_energy_threshold = True
+    r.pause_threshold = 0.7       # allow short pauses in long speech
+    r.non_speaking_duration = 0.5
+    mic = sr.Microphone()
+
+    # calibrate once
+    with mic as source:
+        print("Calibrating microphone for ambient noise...")
+        r.adjust_for_ambient_noise(source, duration=0.8)
+        print("Calibration done. Energy threshold:", r.energy_threshold)
+
     while True:
         try:
-            with sr.Microphone() as source:
-                print("Listening for wake word....")
-                audio = r.listen(source, timeout=3, phrase_time_limit=2) 
-                word = r.recognize_google(audio) 
-                print("Heard:", word)
+            with mic as source:
+                print("Listening for wake word...")
+                # Allow longer time to start speaking and longer phrase so user can say more
+                try:
+                    audio = r.listen(source, timeout=8, phrase_time_limit=10)  # <- increased
+                    word = r.recognize_google(audio, language="en-IN")           # or "en-US"
+                except sr.WaitTimeoutError:
+                    print("No speech detected in timeout window — continuing.")
+                    continue
+                except sr.UnknownValueError:
+                    print("Could not understand audio for wake word.")
+                    continue
+                except Exception as e:
+                    print("Wake recognition error:", e)
+                    continue
 
-                word=word.lower().strip()
-                if word == "alexa":
-                    speak("hmm,how can i help you?")
-                    print("alexa is activated")
-                    with sr.Microphone() as source:
-                        audio = r.listen(source, timeout=4, phrase_time_limit=3)
-                        command = r.recognize_google(audio)
-                        processcmd(command.strip())
+            word = word.lower().strip()
+            print("Heard (wake):", word)
 
-                elif "alexa" in word:
-                    command=word.replace("alexa","")
-                    print(command)
-                    if "exit" in command:
-                        speak("good bye, have a nice day")
-                        break
-                    else:
-                        processcmd(command.strip())
-                    
+            # exact wake word
+            if word == "alexa":
+                speak("Yes? How can I help you?")
+                print("Wakeword detected, listening for full command...")
+                with mic as source:
+                    # small re-calibration helps after wake
+                    r.adjust_for_ambient_noise(source, duration=0.3)
+                    # listen for a longer phrase (user can speak long sentence)
+                    try:
+                        audio = r.listen(source, timeout=8, phrase_time_limit=20)  # allow long commands
+                        command = r.recognize_google(audio, language="en-IN")
+                        print("Recognized command:", command)
+                    except sr.WaitTimeoutError:
+                        speak("I didn't hear anything. Please try again.")
+                        continue
+                    except sr.UnknownValueError:
+                        # save audio for debugging
+                        wav_data = audio.get_wav_data()
+                        fname = f"debug_unknown_{int(time.time())}.wav"
+                        with open(fname, "wb") as f:
+                            f.write(wav_data)
+                        print(f"Could not understand command. Saved to {fname}")
+                        speak("Sorry, I didn't catch that. Can you repeat?")
+                        continue
+                    except Exception as e:
+                        print("Command recognition error:", e)
+                        speak("Sorry, something went wrong while listening.")
+                        continue
+
+                # process the recognized command
+                cmd = command.strip()
+                if cmd.lower() == "exit":
+                    speak("Goodbye, have a nice day.")
+                    break
+                processcmd(cmd)
+
+            # wake+command in same utterance: "alexa play song..."
+            elif "alexa" in word:
+                command = word.replace("alexa", "").strip()
+                print("Command (same utterance):", command)
+                if not command:
+                    speak("Yes?")
+                    continue
+                if "exit" in command.lower():
+                    speak("Goodbye, have a nice day.")
+                    break
+                processcmd(command)
+
+            elif "exit" in word:
+                speak("Goodbye, have a nice day.")
+                break
+
+            else:
+                # nothing relevant heard
+                continue
+
+        except KeyboardInterrupt:
+            speak("Shutting down.")
+            break
         except Exception as e:
-            print("error:",e)
+            print("Main loop error:", e)
+            continue
